@@ -27,6 +27,8 @@ connectDB();
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+const KEEP_ALIVE_URL = process.env.KEEP_ALIVE_URL || `http://localhost:${PORT}`;
+
 app.get('/', (req, res) => {
   res.send('Bot WhatsApp está rodando!');
 });
@@ -37,10 +39,10 @@ app.listen(PORT, () => {
 
 // Auto-ping a cada 6 minutos para evitar inatividade
 setInterval(() => {
-  fetch(`http://localhost:${PORT}`)
-    .then(() => console.log(`[${new Date().toISOString()}] Auto-ping executado.`))
+  fetch(KEEP_ALIVE_URL)
+    .then(() => console.log(`[${new Date().toISOString()}] Auto-ping enviado para ${KEEP_ALIVE_URL}`))
     .catch(err => console.error('Erro no auto-ping:', err));
-}, 6 * 60 * 1000); // 6 minutos
+}, 6 * 60 * 1000);
 
 // EVENTO DE QR CODE
 chatbot.on('qr', (qr) => {
