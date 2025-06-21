@@ -1,8 +1,8 @@
 import express from 'express';
-import fetch from 'node-fetch'; // Para Node <18. Se estiver no Node 18+, pode remover.
+import fetch from 'node-fetch';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import qrcodeTerminal from 'qrcode-terminal';
+import QRCode from 'qrcode'; // 📌 novo import
 
 import chatbot from './config/wpConn.js';
 import connectDB from './config/mongoConn.js';
@@ -20,42 +20,49 @@ const __dirname = path.dirname(__filename);
 const pendingMessages = new Map();
 const delay = process.env.MESSAGE_DELAY || 2000;
 
-// Conectar ao MongoDB
+let latestQR = ''; // 🔹 Armazena o QR Code como base64
+
 connectDB();
 
-// Express server para keep-alive no Render
 const app = express();
 const PORT = process.env.PORT || 3000;
-
 const KEEP_ALIVE_URL = process.env.KEEP_ALIVE_URL || `http://localhost:${PORT}`;
 
 app.get('/', (req, res) => {
   res.send('Bot WhatsApp está rodando!');
 });
 
+app.get('/qr', (req, res) => {
+  if (!latestQR) return res.send('QR Code ainda não disponível.');
+
+  const img = Buffer.from(latestQR.split(',')[1], 'base64');
+  res.writeHead(200, {
+    'Content-Type': 'image/png',
+    'Content-Length': img.length,
+  });
+  res.end(img);
+});
+
 app.listen(PORT, () => {
   console.log(`Servidor Express rodando na porta ${PORT}`);
 });
 
-// Auto-ping a cada 6 minutos para evitar inatividade
 setInterval(() => {
   fetch(KEEP_ALIVE_URL)
     .then(() => console.log(`[${new Date().toISOString()}] Auto-ping enviado para ${KEEP_ALIVE_URL}`))
     .catch(err => console.error('Erro no auto-ping:', err));
 }, 6 * 60 * 1000);
 
-// EVENTO DE QR CODE
-chatbot.on('qr', (qr) => {
-  console.log('QR recebido, exibindo no terminal...');
-  qrcodeTerminal.generate(qr, { small: true });
+// 🔸 Evento de QR Code como imagem base64
+chatbot.on('qr', async (qr) => {
+  console.log('QR code recebido. Acesse /qr para escanear.');
+  latestQR = await QRCode.toDataURL(qr);
 });
 
-// CLIENTE PRONTO
 chatbot.on('ready', () => {
   console.log('🤖 Chatbot pronto para receber mensagens!');
 });
 
-// EVENTO DE MENSAGEM
 chatbot.on('message', async (message) => {
   const chat = await message.getChat();
   const chatId = chat.id._serialized;
@@ -71,7 +78,6 @@ chatbot.on('message', async (message) => {
     pendingMessages.delete(chatId);
   }
 
-  // Transcrição de áudio
   if (message.hasMedia && message.type === 'audio') {
     const media = await message.downloadMedia();
     const fileName = `${Date.now()}.ogg`;
@@ -87,10 +93,8 @@ chatbot.on('message', async (message) => {
     }
   }
 
-  // Salva a mensagem do usuário
   await new Message({ chatId, role: 'user', content: msgText }).save();
 
-  // Recupera histórico recente
   const msgHistory = (
     await Message.find({ chatId }).select('role content -_id').sort({ _id: -1 }).limit(10)
   ).reverse();
@@ -98,7 +102,6 @@ chatbot.on('message', async (message) => {
   const lastUserMsg = msgHistory.slice().reverse().find(msg => msg.role === 'user');
   const lastAssistantMsg = msgHistory.find(msg => msg.role === 'assistant');
 
-  // Lógica de agendamento
   if (lastAssistantMsg?.content.includes('Escolha um horário para o agendamento:')) {
     const option = lastUserMsg.content.trim().match(/\d+/)?.[0] || '';
 
@@ -139,7 +142,6 @@ chatbot.on('message', async (message) => {
     }
 
   } else {
-    // Gera resposta da IA
     const aiResponse = await generateResponse(msgHistory);
     console.log("AI RESPONSE:", aiResponse);
 
@@ -163,5 +165,4 @@ chatbot.on('message', async (message) => {
   }
 });
 
-// Inicializa o bot
 chatbot.initialize();
