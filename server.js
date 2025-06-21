@@ -118,8 +118,16 @@ chatbot.on('message', async (message) => {
     msgHistory.reverse()
 
     if (lastAssistantMsg?.content.includes('Escolha um horário para o agendamento:')) {
-      const option = lastUserMsg.content.trim().match(/\d+/)?.[0] || '';
-      if(['1', '2', '3', '4', '5', '13', '17', '14', '18', 'cancelar', 'Cancelar', 'cancele', 'Cancelar'].includes(option)){
+    const rawText = lastUserMsg.content.trim().toLowerCase();
+    
+    let option = rawText;
+    
+    // Se for número, extrai
+    const numeric = rawText.match(/\d+/)?.[0];
+    if (numeric) option = numeric;
+    
+    if (['1', '2', '3', '4', '5', '13', '14', '17', '18', 'cancelar', 'cancele'].includes(option)) {
+
           const dates = createDateString(option)
 
           console.log("DATAS /////////////////// ",dates)
