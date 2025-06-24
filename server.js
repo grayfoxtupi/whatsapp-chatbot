@@ -1,66 +1,30 @@
-import express from 'express';
-import fetch from 'node-fetch';
-import path from 'path';
-import { fileURLToPath } from 'url';
-import QRCode from 'qrcode'; // 📌 novo import
-
 import chatbot from './config/wpConn.js';
-import connectDB from './config/mongoConn.js';
-
 import Message from './models/messageModel.js';
-import scheduleOptionsText from './models/optionsText.js';
 import { generateResponse } from './events/AIRequests.js';
-import { sendChunks, sendMessage, transcribeAudio } from './helpers/message.js';
+import { sendChunks, sendMessage } from './helpers/message.js';
+import { transcribeAudio } from './helpers/message.js';
+import fs from 'fs';
+import path from 'path';
+import qrcode from 'qrcode-terminal';
+import { fileURLToPath } from 'url';
+import connectDB from './config/mongoConn.js'
+import scheduleOptionsText from './models/optionsText.js';
 import { createDateString } from './helpers/dateHelper.js';
-import { setEvent, insertEvent, deleteEvent, checkEvents, updateEvent } from './helpers/calendarHelper.js';
+import { setEvent, insertEvent,  deleteEvent, checkEvents, updateEvent } from './helpers/calendarHelper.js'
 
-// Utils
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const pendingMessages = new Map();
 const delay = process.env.MESSAGE_DELAY || 2000;
 
-let latestQR = ''; // 🔹 Armazena o QR Code como base64
+connectDB()
 
-connectDB();
-
-const app = express();
-const PORT = process.env.PORT || 3000;
-const KEEP_ALIVE_URL = process.env.KEEP_ALIVE_URL || `http://localhost:${PORT}`;
-
-app.get('/', (req, res) => {
-  res.send('Bot WhatsApp está rodando!');
+chatbot.once('ready', () => {
+  console.log('Client is ready!');
 });
 
-app.get('/qr', (req, res) => {
-  if (!latestQR) return res.send('QR Code ainda não disponível.');
-
-  const img = Buffer.from(latestQR.split(',')[1], 'base64');
-  res.writeHead(200, {
-    'Content-Type': 'image/png',
-    'Content-Length': img.length,
-  });
-  res.end(img);
-});
-
-app.listen(PORT, () => {
-  console.log(`Servidor Express rodando na porta ${PORT}`);
-});
-
-setInterval(() => {
-  fetch(KEEP_ALIVE_URL)
-    .then(() => console.log(`[${new Date().toISOString()}] Auto-ping enviado para ${KEEP_ALIVE_URL}`))
-    .catch(err => console.error('Erro no auto-ping:', err));
-}, 6 * 60 * 1000);
-
-// 🔸 Evento de QR Code como imagem base64
-chatbot.on('qr', async (qr) => {
-  console.log('QR code recebido. Acesse /qr para escanear.');
-  latestQR = await QRCode.toDataURL(qr);
-});
-
-chatbot.on('ready', () => {
-  console.log('🤖 Chatbot pronto para receber mensagens!');
+chatbot.on('qr', (qr) => {
+  qrcode.generate(qr, { small: true });
 });
 
 chatbot.on('message', async (message) => {
@@ -210,4 +174,4 @@ chatbot.on('message', async (message) => {
     }
   });
 
-chatbot.initialize();
+  chatbot.initialize();
